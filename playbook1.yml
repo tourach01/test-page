@@ -1,0 +1,48 @@
+# playbook.yml
+
+---
+- name: Appeler une API paginée
+  hosts: localhost
+  gather_facts: false
+  vars:
+    api_url: "https://server:port/api/v2/hosts/"
+    page_size: 50
+  tasks:
+    - name: Initialiser la liste des serveurs
+      set_fact:
+        all_servers: []
+
+    - name: Récupérer la première page
+      uri:
+        url: "{{ api_url }}?page_size={{ page_size }}&page=1"
+        method: GET
+      register: api_response
+
+    - name: Ajouter les serveurs de la première page à la liste
+      set_fact:
+        all_servers: "{{ all_servers + api_response.json.results }}"
+
+    - name: Déterminer le nombre total de pages
+      set_fact:
+        total_pages: "{{ (api_response.json.count + page_size - 1) // page_size }}"
+
+    - name: Récupérer les pages suivantes
+      set_fact:
+        current_page: 2
+      loop: "{{ range(2, total_pages + 1) }}"
+      loop_control:
+        loop_var: current_page
+      tasks:
+        - name: Récupérer la page suivante
+          uri:
+            url: "{{ api_url }}?page_size={{ page_size }}&page={{ current_page }}"
+            method: GET
+          register: api_response
+
+        - name: Ajouter les serveurs de la page suivante à la liste
+          set_fact:
+            all_servers: "{{ all_servers + api_response.json.results }}"
+
+    - name: Afficher la liste complète des serveurs
+      debug:
+        var: all_servers
